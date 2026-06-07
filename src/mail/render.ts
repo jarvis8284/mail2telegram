@@ -19,7 +19,14 @@ export async function renderEmailListMode(mail: EmailCache, env: Environment): P
         AI,
         DOMAIN,
     } = env;
-    const text = `${mail.subject}\n\n-----------\nFrom\t:\t${mail.from}\nTo\t\t:\t${mail.to}`;
+
+    // 获取邮件内容预览（清理后的前200字符）
+    const cleanedText = cleanEmailText(mail.text);
+    const preview = cleanedText.substring(0, 200);
+    const previewText = preview.length < cleanedText.length ? `${preview}...` : preview;
+
+    const text = `${mail.subject}\n\n-----------\nFrom\t:\t${mail.from}\nTo\t\t:\t${mail.to}\n\n${previewText}`;
+
     const keyboard: Telegram.InlineKeyboardButton[] = [
         {
             text: 'Preview',
@@ -84,9 +91,62 @@ function renderEmailDetail(text: string | undefined | null, id: string): EmailDe
     };
 }
 
+function cleanEmailText(text: string | undefined | null): string {
+    if (!text) return 'No content';
+
+    let cleaned = text;
+
+    // 移除图片链接标记 [https://...]
+    cleaned = cleaned.replace(/\[https?:\/\/[^\]]+\]/g, '');
+
+    // 移除追踪链接（通常很长，包含大量编码字符）
+    // 匹配包含 upn=, click?, -2F, -3D 等特征的长 URL
+    cleaned = cleaned.replace(/https?:\/\/[^\s]*(?:upn=|click\?)[^\s]*/g, '');
+
+    // 移除 URL 编码残留（包含 -2F, -3D, -2B 等特征的字符串，通常是 URL 片段）
+    // 匹配至少包含3个编码模式的行
+    cleaned = cleaned.replace(/^[^\n]*(?:-2[A-F]|_CB|upn)[^\n]*$/gm, '');
+
+    // 移除常见的营销/社交媒体内容
+    const marketingPatterns = [
+        /想要获取更多信息.*/s, // 从"想要获取更多信息"开始的所有内容
+        /关注我们的社交媒体.*/s,
+        /下载.*app.*/gi,
+        /白色\s*x\s*浅色/g,
+    ];
+    marketingPatterns.forEach(pattern => {
+        cleaned = cleaned.replace(pattern, '');
+    });
+
+    // 移除重复的应用商店标签
+    cleaned = cleaned.replace(/^(App Store|Google Play|YouTube|Instagram|X|下载)\s*$/gm, '');
+
+    // 移除多余的空行（3个或以上连续换行符）
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+    // 移除行首行尾空白
+    cleaned = cleaned.trim();
+
+    return cleaned;
+}
+
 // eslint-disable-next-line unused-imports/no-unused-vars
 export async function renderEmailPreviewMode(mail: EmailCache, env: Environment): Promise<EmailDetailParams> {
-    return renderEmailDetail(mail.text?.substring(0, 4096), mail.id);
+    // 构建邮件头信息
+    const header = [
+        `📧 主题: ${mail.subject}`,
+        `📤 发件人: ${mail.from}`,
+        `📥 收件人: ${mail.to}`,
+        mail.date ? `🕐 时间: ${new Date(mail.date).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}` : null,
+        '',
+        '─'.repeat(40),
+        '',
+    ].filter(Boolean).join('\n');
+
+    const cleanedText = cleanEmailText(mail.text);
+    const fullText = header + cleanedText;
+
+    return renderEmailDetail(fullText.substring(0, 4096), mail.id);
 }
 
 export async function renderEmailSummaryMode(mail: EmailCache, env: Environment): Promise<EmailDetailParams> {

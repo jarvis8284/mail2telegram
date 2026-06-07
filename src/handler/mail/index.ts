@@ -77,7 +77,7 @@ export async function emailHandler(message: ForwardableEmailMessage, env: Enviro
             const ttl = Number.parseInt(MAIL_TTL, 10) || 60 * 60 * 24;
             const maxSize = Number.parseInt(MAX_EMAIL_SIZE || '', 10) || 512 * 1024;
             const maxSizePolicy = MAX_EMAIL_SIZE_POLICY || 'truncate';
-            const mail = await parseEmail(message, maxSize, maxSizePolicy);
+            const mail = await parseEmail(message, maxSize, maxSizePolicy, true);
             await dao.saveMailCache(mail.id, mail, ttl);
             const msgIDs = await sendMailToTelegram(mail, env);
             for (const msgID of msgIDs) {
